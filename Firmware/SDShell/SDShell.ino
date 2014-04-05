@@ -47,14 +47,11 @@
 // v0.02 2014-03-13 - progmem, capt, type
 // v0.01 2014-03-12 - Initial testing, cd, ls
 
-#define __USE_EE__
 
 #include <SPI.h>
 #include <SD.h>            // SD Card file IO
 #include <avr/pgmspace.h>  // PROGMEM stuff (strings to DATA)
-#ifdef __USE_EE__
 #include <EEPROM.h>
-#endif
 #include "LED.h"           // LED interface
 // other definitions and variables
 
@@ -118,9 +115,7 @@ static const unsigned char msg_ByLine[]   PROGMEM = "by yorgle@gmail.com (Scott 
 
 static const unsigned char msg_Line[] PROGMEM = "---8<---";
 static const unsigned char msg_HexHeader[] PROGMEM =  "       0  1  2  3  4  5  6  7   8  9  A  B  C  D  E  F";
-#ifdef __USE_EE__
 static const unsigned char msg_EEOver[] PROGMEM = "EEProm space overflow.";
-#endif
 
 void printmsgNoNL(const unsigned char *msg)
 {
@@ -453,14 +448,15 @@ struct fcns fcnlist[] =
   { "pwd", &cmd_pwd, kFcnFlagSD },
   { "mkdir", &cmd_mkdir, kFcnFlagSD },
   { "rmdir", &cmd_rmdir, kFcnFlagSD },
+  { "dir", &cmd_ls, kFcnFlagSD },
   { "ls", &cmd_ls, kFcnFlagSD },
+  { "del", &cmd_rm, kFcnFlagSD },
   { "rm", &cmd_rm, kFcnFlagSD },
   { "capt", &cmd_capture, kFcnFlagSD },
   { "hex", &cmd_hex, kFcnFlagSD },
   { "type", &cmd_type, kFcnFlagSD },
   
   // these are for EEProm IO
-#ifdef __USE_EE__
   { "EEProm", NULL, kFcnFlagHDR },
   { "ecapt", &cmd_ecapture },
   { "ehex", &cmd_ehex },
@@ -468,11 +464,11 @@ struct fcns fcnlist[] =
   { "erm", &cmd_erm },
   { "eload", &cmd_eload },
   { "esave", &cmd_esave },
-#endif
 
   // Utility
   { "Utility", NULL, kFcnFlagHDR },
   { "?", &cmd_help },
+  { "help" &cmd_help },
   { "vers", &cmd_version },
   { "reset", &cmd_reset },
   { NULL, NULL }
@@ -726,7 +722,6 @@ void hexdump( unsigned char *bufh, int lastgood ) /* implied 16 byte buffer */
 }
 
 
-#ifdef __USE_EE__
 //   Do a hex dump of the entire EEProm
 void cmd_ehex( void )
 {
@@ -914,7 +909,6 @@ void cmd_ecapture( void )
 
   Led_Set( kLedIdle );
 }
-#endif /* __USE_EE__ */
 
 void cmd_reset( void )
 {
