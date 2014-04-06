@@ -32,14 +32,17 @@
 // A5 -
 
 
-// It is not functioning right now. What's broken?
+// Need to add: 
+//    delayed writes for small buffered targets systems
+//    auto speed detect
 
-// missing features:
-//  operations on files in subdirectories
-//    need "Temp Add To Path"
-//         "Remove Temp From path"
- 
-#define VERSION "0.04"
+#define VERSION "0.5"
+// v0.05 2014-04-05 - Path support for files added
+//                    capt/ecapt/onto/eonto added/put into one function
+//                    SD bugfix
+//                    'type' skips '\0' now.  (esave will write out nulls)
+//                    Experimental autobaud startup added.  Just hit 'return' a bunch
+//                    MuxSerial removed
 // v0.04 2014-03-15 - MuxSerial added, to do both hard and soft serial simultaneously
 //                    delay after Nchars for slow systems
 //                    card info on startup
@@ -117,6 +120,7 @@ static const unsigned char msg_Line[] PROGMEM = "---8<---";
 static const unsigned char msg_HexHeader[] PROGMEM =  "       0  1  2  3  4  5  6  7   8  9  A  B  C  D  E  F";
 static const unsigned char msg_EEOver[] PROGMEM = "EEProm space overflow.";
 
+
 void printmsgNoNL(const unsigned char *msg)
 {
   while( pgm_read_byte( msg ) != 0 ) {
@@ -181,6 +185,40 @@ void idle( void )
 }
 
 
+long bauds[] = { /*115200,*/ 9600, 19200, 4800, 57600, // common
+                        2400, 1200, 38400, 28800, 14400, 1200, 0 }; // less common
+// doesn't seem to work for 300, 2400, 115200 baud
+// well, it detects 115200, but it doesn't work
+
+long baud = 0;
+
+void autobaud_begin( void )
+{
+  baud = 0;
+  do {
+    Serial.begin( bauds[baud] );
+    while( !Serial ); // leonardo fix
+    
+    // wait for a character
+    while( !Serial.available() ) { delay( 5 ); }
+    
+    int ch = Serial.read();
+    Serial.println( ch, DEC );
+    if( ch == 0x0d || ch == 0x0a) {
+      baud = bauds[baud];
+      Serial.flush();
+      Serial.print( "CONNECT " );
+      Serial.println( baud, DEC );
+      return;
+    }
+    Serial.end();
+    
+    baud++;
+  } while( bauds[baud] != 0 );
+  baud = 0;
+}
+
+
 //////////////////////////////////////////
 
 void setup()
@@ -192,7 +230,8 @@ void setup()
   Led_Setup();
   
   // set up the serial
-  Serial.begin( 9600 );
+  //Serial.begin( 9600 );
+  autobaud_begin();
   
   // button input
   pinMode( kButton, INPUT_PULLUP );
@@ -448,17 +487,19 @@ struct fcns fcnlist[] =
   { "pwd", &cmd_pwd, kFcnFlagSD },
   { "mkdir", &cmd_mkdir, kFcnFlagSD },
   { "rmdir", &cmd_rmdir, kFcnFlagSD },
-  { "dir", &cmd_ls, kFcnFlagSD },
   { "ls", &cmd_ls, kFcnFlagSD },
-  { "del", &cmd_rm, kFcnFlagSD },
+  { "dir", &cmd_ls, kFcnFlagSD },
   { "rm", &cmd_rm, kFcnFlagSD },
+  { "del", &cmd_rm, kFcnFlagSD },
   { "capt", &cmd_capture, kFcnFlagSD },
+  { "onto", &cmd_onto, kFcnFlagSD },
   { "hex", &cmd_hex, kFcnFlagSD },
   { "type", &cmd_type, kFcnFlagSD },
   
   // these are for EEProm IO
   { "EEProm", NULL, kFcnFlagHDR },
   { "ecapt", &cmd_ecapture },
+  { "eonto", &cmd_eonto },
   { "ehex", &cmd_ehex },
   { "etype", &cmd_etype },
   { "erm", &cmd_erm },
@@ -468,7 +509,7 @@ struct fcns fcnlist[] =
   // Utility
   { "Utility", NULL, kFcnFlagHDR },
   { "?", &cmd_help },
-  { "help" &cmd_help },
+  { "help", &cmd_help },
   { "vers", &cmd_version },
   { "reset", &cmd_reset },
   { NULL, NULL }
@@ -565,23 +606,74 @@ void cmd_ls( void )
 
 
 
+////////////////////////////////
+// capture to eeprom, file, new or append
+
+#define kCaptureEEPROM  1
+#define kCaptureFILE    2
+
+#define kCaptureNEW     4
+#define kCaptureAPPEND  5
+
 void cmd_capture( void )
 {
+  Serial.println( "New capt" );
+  do_capture( kCaptureFILE, kCaptureNEW );
+}
+
+void cmd_onto( void )
+{
+  Serial.println( "New onto" );
+  do_capture( kCaptureFILE, kCaptureAPPEND );
+}
+
+void cmd_ecapture( void )
+{
+  Serial.println( "New ecapt" );
+  do_capture( kCaptureEEPROM, kCaptureNEW );
+}
+
+void cmd_eonto( void )
+{
+  Serial.println( "New eonto" );
+  do_capture( kCaptureEEPROM, kCaptureAPPEND );
+}
+
+void do_capture( int FileOrEEPROM, int NewOrAppend )
+{
+  // this could probebly be combined with cmd_capture()
   bool echo = true;
-  if( argc < 2 ) { cmd_error( kErrNo ); return; }
+  long nbytes = 0;
+  File myFile;
   
-  buildPath( argv[1] );  
-  File myFile = SD.open( path, FILE_WRITE);
-  unbuildPath();
+  if( FileOrEEPROM == kCaptureFILE ) {
+    if( argc < 2 ) { cmd_error( kErrNo ); return; }
   
-  if( !myFile ) { cmd_error( kErrCant ); return; }
+    buildPath( argv[1] );
+    // need to explicitly do this for a new file, since SD library is wonky
+    if( NewOrAppend == kCaptureNEW ) {
+      SD.remove( path );
+    }
+    myFile = SD.open( argv[1], FILE_WRITE );
+    unbuildPath();
+    if( !myFile ) { cmd_error( kErrCant ); return; }
+  } else {
+    if( NewOrAppend == kCaptureNEW ) {
+      nbytes = 0;
+    } else {
+      // scan to the end of EEPROM
+      while( EEPROM.read( nbytes ) != '\0' && nbytes < E2END ) nbytes++;
+    }
+  }
+  
+  
   Led_Set( kLedWrite );
   
   printmsg( msg_StartCapture );
   
   int linepos = 0;
   bool done = false;
-  while( !done && (digitalRead( kButton ) == HIGH) ) {
+  while( !done && (digitalRead( kButton ) == HIGH && nbytes < E2END ) ) {
     if( Serial.available() ) {
       // get the character
       int ch = Serial.read();
@@ -592,7 +684,12 @@ void cmd_capture( void )
       } else {
         // or dump it to the file
         if( echo ) Serial.write( ch );
-        myFile.write( ch );
+        
+        if( FileOrEEPROM == kCaptureFILE ) {
+          myFile.write( ch );
+        } else {
+          EEPROM.write( nbytes++, ch );
+        }
         linepos++;
       }
       
@@ -606,12 +703,23 @@ void cmd_capture( void )
       idle();
     }
   }
-
-  myFile.close();
-  printmsg( msg_DoneCapture );
+  
+  if( FileOrEEPROM == kCaptureFILE ) {
+    myFile.close();
+    printmsg( msg_DoneCapture );
+  } else {
+    if( nbytes >= E2END ) {
+       printmsg( msg_EEOver );
+     } else {
+       EEPROM.write( nbytes, '\0' ); // end the string, just in case
+       printmsg( msg_DoneCapture );
+     }
+  }
 
   Led_Set( kLedIdle );
 }
+
+////////
 
 void cmd_type( void )
 {
@@ -625,7 +733,10 @@ void cmd_type( void )
   Led_Set( kLedRead );
   printmsg( msg_Line );
   while( myFile.available() && (digitalRead( kButton ) == HIGH )) {
-    Serial.write( myFile.read() );
+    int ch = myFile.read();
+    if( ch != '\0' ) {
+      Serial.write( ch );
+    }
   }
   if( digitalRead( kButton ) == LOW ) {
     printmsg( msg_Break );
@@ -853,62 +964,6 @@ void cmd_erm( void )
   Led_Set( kLedIdle );
 }
 
-
-void cmd_ecapture( void )
-{
-  // this could probebly be combined with cmd_capture()
-  bool echo = true;
-//  if( argc < 2 ) { cmd_error( kErrNo ); return; }
-  
-  //buildPath( argv[1] );
-  //File myFile = SD.open( argv[1], FILE_WRITE);
-  //unbuildPath();
-  //if( !myFile ) { cmd_error( kErrCant ); return; }
-  Led_Set( kLedWrite );
-  
-  printmsg( msg_StartCapture );
-  long nbytes = 0;
-  
-  int linepos = 0;
-  bool done = false;
-  while( !done && (digitalRead( kButton ) == HIGH && nbytes < E2END ) ) {
-    if( Serial.available() ) {
-      // get the character
-      int ch = Serial.read();
-      
-      // check for end of input
-      if( ch == '.' && linepos == 0 ) {
-        done = true;
-      } else {
-        // or dump it to the file
-        if( echo ) Serial.write( ch );
-        //myFile.write( ch );
-        
-        EEPROM.write( nbytes++, ch );
-        linepos++;
-      }
-      
-      // inc or reset the linepos
-      if( ch == '\n' || ch == '\r' ) {
-        linepos = 0;
-      } else {
-        linepos++;
-      }
-    } else {
-      idle();
-    }
-  }
-  
-  //myFile.close();
-      
-  if( nbytes >= E2END ) {
-    printmsg( msg_EEOver );
-   } else {
-    printmsg( msg_DoneCapture );
-   }
-
-  Led_Set( kLedIdle );
-}
 
 void cmd_reset( void )
 {

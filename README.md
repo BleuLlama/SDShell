@@ -46,7 +46,7 @@ microSD to another.)
  - will go until you type a '.' at the beginning of a line.  [return] [.]
  - if file exists, it gets overwritten
 - onto FILENAME
- - same as capt, but appends to an existing file. (future)
+ - same as capt, but appends to an existing file.
 - rm FILENAME
  - remove the specified file
 - etype
@@ -58,7 +58,10 @@ microSD to another.)
 - ecapt
  - capture your typing (or content send) into the EEPROM
  - will go until the "break" button is pressed
+ - starts at the begining of EEPROM space
  - will go until the EEProm fills up
+- eonto
+ - same as ecapt, but appends to existing content
 - erm
  - clear the EEPROM.  Fills it with 0s.
 - eload FILENAME
