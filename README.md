@@ -164,15 +164,15 @@ Next you may want to add a break button.
 - From pin 7 of the arduino, tie it to one side of a pushbutton switch
 - From the other side of the pushbutton switch, tie it to Ground
 
-                     +---\/\/\/---(VCC)
-                     |    ___
-    (Arduino D7)-----+----o o-----(GND)
+                         +---\/\/\/---(VCC)
+                         |    ___
+        (Arduino D7)-----+----o o-----(GND)
 
 Next are the two indicator LEDs, red and green.
 - From pin 5, tie it to the anode (longer wire) of the green led
 - from the other lead of the green led, tie it to a 1kohm resistor
 - from the other lead of the resistor, tie it to ground
 
-    (Arduino D5/6)----|>|----\/\/\/---(GND)
+         (Arduino D5/6)----|>|----\/\/\/---(GND)
 
 Do likewise for the red led, but connect it to pin 6 of the Arduino
