@@ -169,9 +169,9 @@ Next you may want to add a break button.
         (Arduino D7)-----+----o o-----(GND)
 
 Next are the two indicator LEDs, red and green.
-- From pin 5, tie it to the anode (longer wire) of the green led
-- from the other lead of the green led, tie it to a 1kohm resistor
-- from the other lead of the resistor, tie it to ground
+- From pin 5, tie it to one side of a 1kohm resistor
+- from the other lead of the resistor, tie it to the anode (longer lead) of the green led
+- from the cathode (shorter lead) of the led, tie it to ground
 
          (Arduino D5/6)----\/\/\/----|>|----(GND)
 
