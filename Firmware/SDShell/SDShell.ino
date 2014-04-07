@@ -13,8 +13,8 @@
 // D2  -
 // D3  -
 // D4  - (SD Card Select for Seeed Studio, Ethernet shield)
-// D5  Green LED (sourced) (configure in LED.h)
-// D6  Red LED (sourced) (configure in LED.h)
+// D5  Green LED (configure in LED.h)
+// D6  Red LED (configure in LED.h)
 // D7  Break button (press to ground) (configure below)
 
 // D8  - (SD Card Select for Sparkfun)
@@ -34,9 +34,9 @@
 
 // Need to add: 
 //    delayed writes for small buffered targets systems
-//    auto speed detect
 
-#define VERSION "0.5"
+#define VERSION "0.6"
+// v0.06 2014-04-06 - fast LED flash on autobaud wait
 // v0.05 2014-04-05 - Path support for files added
 //                    capt/ecapt/onto/eonto added/put into one function
 //                    SD bugfix
@@ -200,7 +200,7 @@ void autobaud_begin( void )
     while( !Serial ); // leonardo fix
     
     // wait for a character
-    while( !Serial.available() ) { delay( 5 ); }
+    while( !Serial.available() ) { Led_Set( kLedProbe ); }
     
     int ch = Serial.read();
     Serial.println( ch, DEC );
@@ -209,6 +209,7 @@ void autobaud_begin( void )
       Serial.flush();
       Serial.print( "CONNECT " );
       Serial.println( baud, DEC );
+      Led_Set( kLedWait );
       return;
     }
     Serial.end();

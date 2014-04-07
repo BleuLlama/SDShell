@@ -2,7 +2,6 @@
 //
 //  Scott Lawrence  2014-03
 //
-//  Serial multiplexer, kinda.
 //  MIT Licensed
 //
 //  Just something I threw together to have multiple status outputs
@@ -15,11 +14,13 @@
 
 // LED Brightnesses
 #define kBright 255
-#define kVDim   20
+#define kMedium 100
+#define kVDim   50
 
 // LED Blink Speeds
-#define kFast   100
-#define kSlow   500
+#define kVeryFast  40
+#define kFast      100
+#define kSlow      500
 
 // setup the LED stuff
 void Led_Setup( void );
@@ -31,7 +32,9 @@ void Led_Setup( void );
 #define kLedError  (3)  // recoverable error
 #define kLedRead   (4)  // reading from SD
 #define kLedWrite  (5)  // writing to SD
-#define kLedFatal  (6)  // fatal error, blink and loop forever
+#define kLedWait   (6)
+#define kLedFatal  (7)  // fatal error, blink and loop forever
+#define kLedProbe  (8)  // green flash
 
 // and the function to enable a mode
 void Led_Set( int which );

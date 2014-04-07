@@ -173,6 +173,11 @@ Next are the two indicator LEDs, red and green.
 - from the other lead of the green led, tie it to a 1kohm resistor
 - from the other lead of the resistor, tie it to ground
 
-         (Arduino D5/6)----|>|----\/\/\/---(GND)
+         (Arduino D5/6)----\/\/\/----|>|----(GND)
 
 Do likewise for the red led, but connect it to pin 6 of the Arduino
+
+If you are using a bi-color, three lead LED, the center, longer
+lead is the cathode (common ground).  The middle-length lead (on
+the side with the notch in the plastic) is the RED anode, and the
+shortest lead is the GREEN anode.

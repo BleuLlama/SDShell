@@ -2,7 +2,6 @@
 //
 //  Scott Lawrence  2014-03
 //
-//  Serial multiplexer, kinda.
 //  MIT Licensed
 //
 //  Just something I threw together to have multiple status outputs
@@ -27,6 +26,13 @@ void Led_FatalFlash( void )
   delay( kFast );
 }
 
+void Led_ProbeFlash( void )
+{
+  Led_Set( kLedWait );
+  delay( kVeryFast );
+  Led_Set( kLedOff );
+  delay( kVeryFast );
+}
 
 void Led_Set( int which )
 {
@@ -35,6 +41,8 @@ void Led_Set( int which )
 
   switch( which ) {
     case( kLedFatal ): Led_FatalFlash(); break;
+    case( kLedProbe ): Led_ProbeFlash(); break;
+    case( kLedWait ):  g=kMedium; break;
     case( kLedOff ):   break;
     case( kLedStart ): r=kBright; g=kBright; break;
     case( kLedError ): r=kBright; break;
