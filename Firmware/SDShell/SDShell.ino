@@ -46,6 +46,7 @@
 //    cat <file> onto <file>
 //    dc?
 //    pagesize (value)  (with no operand, just displays the value
+//    sd (pin) to pick the sd card to use
 
 #define VERSION "0.7"
 // v0.07 2014-04-07 - more, echo, in, out implemented
@@ -1109,14 +1110,13 @@ void cmd_in( void )
   port = atoi( argv[1] );
   if( port < 2 ) { cmd_error( kErrPort ); return; }
   
-  Serial.print( "Port " );
   Serial.print( port, DEC );
   
   pinMode( port, INPUT );
   if( port > 13 ) value = analogRead( port );
   else            value = digitalRead( port );
   
-  Serial.print( " Value " );
+  Serial.print( ":" );
   Serial.println( value, DEC );    
 }
 
@@ -1131,9 +1131,8 @@ void cmd_out( void )
   if( port < 2 ) { cmd_error( kErrPort ); return; }
   
   value = atoi( argv[2] );
-  Serial.print( "Port " );
-  Serial.println( port, DEC );
-  Serial.print( "Value " );
+  Serial.print( port, DEC );
+  Serial.print( ":" );
   Serial.println( value, DEC );
   
   
