@@ -181,3 +181,36 @@ If you are using a bi-color, three lead LED, the center, longer
 lead is the cathode (common ground).  The middle-length lead (on
 the side with the notch in the plastic) is the RED anode, and the
 shortest lead is the GREEN anode.
+
+
+Usage
+=====
+
+Assuming that you've got the SD card configured correctly, and you have
+LEDs and the button hooked up as explained above, here's how things should 
+work.
+
+When the board is powered on, the GREEN light will flash fast.  This is 
+showing that it is in the Autobaud routine.  
+
+If you hit return a few times, it should detect your baud rate
+properly.  At that time, it will show "CONNECT" on your serial
+device, along with the baud rate.  If the SD card is readable, the
+GREEN light will remain lit, dimly.  If the SD card is not readable,
+the light will flash RED quickly to indicate this, and then go to
+the dim GREEN light.  If "LOCK_ON_BAD_SD" is defined in the code,
+then it will flash RED until it is powered off, or the BREAK button
+is pressed, when it will restart.
+
+So if you have a bad SD card, or it's not inserted properly, re-seat it,
+then press reset or the break button or type 'reset' and it will start
+over.
+
+During normal operation, READ operations (more, type, hex) will cause the
+GREEN light to stay lit, brightly.  WRITE operations (capt, onto) will cause
+the RED light to stay lit, brightly.
+
+To create a new file, type 'capt' to capture text.  The light will turn RED,
+and it will prompt you to enter your text.  It will continue to record
+this text to the specified file until either you hit the BREAK button, or 
+you hit return, then type a single period on a line.
