@@ -32,10 +32,23 @@
 // A5 -
 
 
-// Need to add: 
-//    delayed writes for small buffered targets systems
+// To add: 
+//    funnel all reads through one function, all writes through another
+//    then: delayed writes for small buffered targets systems
+//    more: word wrap
+//          0d 0a 0d 0a dumps nonprintables
+//          display page number
+//          skip to page number
+//    hex:  Paged?
+//    head <file> <lines>
+//    tail <file> <lines>
+//    cat alias for 'type'
+//    cat <file> onto <file>
+//    dc?
+//    pagesize (value)  (with no operand, just displays the value
 
-#define VERSION "0.6"
+#define VERSION "0.7"
+// v0.07 2014-04-07 - more, echo, in, out implemented
 // v0.06 2014-04-06 - fast LED flash on autobaud wait
 // v0.05 2014-04-05 - Path support for files added
 //                    capt/ecapt/onto/eonto added/put into one function
@@ -67,6 +80,12 @@
 // Sparkfun SD shield: pin 8
 // Seeed Studio SD shield: pin 4
 #define kSDPin 10
+
+// the default baudrate if the 'break' button is hit
+#define kDefaultBaud 9600
+
+// this is the number of lines to be displayed on each "page" for "MORE"
+#define kPageSize  10
 
 // size of our string buffers
 #define kMaxBuf 100
@@ -109,6 +128,10 @@ static const unsigned char msg_SDCmd[]   PROGMEM = "No SD.";
 static const unsigned char msg_Cmds[]    PROGMEM = "Commands:";
 static const unsigned char msg_Bytes[]   PROGMEM = " bytes.";
 static const unsigned char msg_Files[]   PROGMEM = " Files.";
+static const unsigned char msg_More[]    PROGMEM = " ==[ More ]==";
+static const unsigned char msg_EchoOn[]  PROGMEM = "Echo on.";
+static const unsigned char msg_EchoOff[] PROGMEM = "Echo off.";
+static const unsigned char msg_BadPort[] PROGMEM = "Bad port.";
 
 static const unsigned char msg_StartCapture[]  PROGMEM = "Enter your text.  End with '.'";
 static const unsigned char msg_DoneCapture[]   PROGMEM = "Saved to file.";
@@ -152,6 +175,7 @@ void printmsg(const unsigned char *msg)
 #define kErrPath   (4)
 #define kErrFailed (5)
 #define kErrSDCmd  (10)
+#define kErrPort   (20)
 
 void cmd_error( char type )
 {
@@ -164,6 +188,7 @@ void cmd_error( char type )
     case( kErrPath ): printmsg( msg_Path ); break;
     case( kErrFailed ): printmsg( msg_Failed ); break;
     case( kErrSDCmd ): printmsg( msg_SDCmd ); break;
+    case( kErrPort): printmsg( msg_BadPort ); break;
   }
 }
 
@@ -192,6 +217,14 @@ long bauds[] = { /*115200,*/ 9600, 19200, 4800, 57600, // common
 
 long baud = 0;
 
+void serial_connected( void )
+{
+      Serial.flush();
+      Serial.print( "CONNECT " );
+      Serial.println( baud, DEC );
+      Led_Set( kLedWait );
+}
+
 void autobaud_begin( void )
 {
   baud = 0;
@@ -200,16 +233,25 @@ void autobaud_begin( void )
     while( !Serial ); // leonardo fix
     
     // wait for a character
-    while( !Serial.available() ) { Led_Set( kLedProbe ); }
+    while( !Serial.available() ) { 
+      Led_Set( kLedProbe );
+      
+      // check for break-out
+      if( digitalRead( kButton ) == LOW ) {
+        baud = kDefaultBaud;
+        Serial.end();
+        Serial.begin( baud );
+        while( !Serial ); // leonardo!
+        serial_connected();
+        return;
+      }
+    }
     
     int ch = Serial.read();
     Serial.println( ch, DEC );
     if( ch == 0x0d || ch == 0x0a) {
       baud = bauds[baud];
-      Serial.flush();
-      Serial.print( "CONNECT " );
-      Serial.println( baud, DEC );
-      Led_Set( kLedWait );
+      serial_connected( );
       return;
     }
     Serial.end();
@@ -278,6 +320,9 @@ void SD_Start( void )
     resetFunc();
     return;
 #else
+    Led_Set( kLedFatal );
+    Led_Set( kLedFatal );
+    Led_Set( kLedFatal );
     Led_Set( kLedFatal );
 #endif
   } else {
@@ -393,6 +438,19 @@ void printDirectory(File dir, int numTabs)
 //////////////////////////////////////////
 // command line interface
 
+bool localEcho = false;
+
+void cmd_echo( void )
+{
+  localEcho = localEcho?false:true;
+  
+  if( localEcho ) {
+    printmsg( msg_EchoOn );
+  } else {
+    printmsg( msg_EchoOff );
+  }
+}
+
 void getLine( void )
 {
   int ch = 'g';
@@ -401,6 +459,7 @@ void getLine( void )
   do {
     while( !Serial.available() ) idle();
     ch = Serial.read();
+    if( localEcho ) { Serial.write( ch ); }
     
     // check for backspace
     if( ch == 0x08 /* backspace character, CTRL-H */ ) {
@@ -496,6 +555,7 @@ struct fcns fcnlist[] =
   { "onto", &cmd_onto, kFcnFlagSD },
   { "hex", &cmd_hex, kFcnFlagSD },
   { "type", &cmd_type, kFcnFlagSD },
+  { "more", &cmd_more, kFcnFlagSD },
   
   // these are for EEProm IO
   { "EEProm", NULL, kFcnFlagHDR },
@@ -507,8 +567,14 @@ struct fcns fcnlist[] =
   { "eload", &cmd_eload },
   { "esave", &cmd_esave },
 
+  // Micro
+  { "Micro", NULL, kFcnFlagHDR },
+  { "in", &cmd_in },
+  { "out", &cmd_out },
+  
   // Utility
   { "Utility", NULL, kFcnFlagHDR },
+  { "echo", &cmd_echo },
   { "?", &cmd_help },
   { "help", &cmd_help },
   { "vers", &cmd_version },
@@ -643,7 +709,6 @@ void cmd_eonto( void )
 void do_capture( int FileOrEEPROM, int NewOrAppend )
 {
   // this could probebly be combined with cmd_capture()
-  bool echo = true;
   long nbytes = 0;
   File myFile;
   
@@ -684,7 +749,7 @@ void do_capture( int FileOrEEPROM, int NewOrAppend )
         done = true;
       } else {
         // or dump it to the file
-        if( echo ) Serial.write( ch );
+        if( localEcho ) Serial.write( ch );
         
         if( FileOrEEPROM == kCaptureFILE ) {
           myFile.write( ch );
@@ -745,6 +810,72 @@ void cmd_type( void )
 
   myFile.close();
   printmsg( msg_Line );
+  Led_Set( kLedIdle );
+}
+
+void cmd_more( void )
+{
+  int linecount = 0;
+  int ch, lastch;
+  if( argc < 2 ) { cmd_error( kErrNo ); return; }
+  
+  buildPath( argv[1] );
+  File myFile = SD.open( path );
+  unbuildPath();
+  if( !myFile ) { cmd_error( kErrCant ); return; }
+  
+  Led_Set( kLedRead );
+  lastch = -1;
+  bool userExit = false;
+  
+  while( myFile.available() && (digitalRead( kButton ) == HIGH ) && !userExit ) {
+    ch = myFile.read();
+    
+    if( ch == '\0' ) {
+      ; // ignore this character
+    } if( (ch == 0x0d || ch == 0x0a ) && 
+          (lastch == 0x0d || lastch == 0x0a )) {
+      ; // ignore this character too!
+    } else {
+      // check newline
+      if( ch == 0x0d || ch == 0x0a ) {
+        linecount++;
+        Serial.println();
+        
+        if( linecount > kPageSize ) {
+          printmsg( msg_More );
+          bool waitForInput = true;
+          while( waitForInput ) {
+            while( !Serial.available() && digitalRead( kButton ) != LOW ) { idle(); }
+            
+            if( digitalRead( kButton ) == LOW ) {
+              waitForInput = false;
+              linecount = 0;
+            }
+            if( Serial.available() ) {
+              ch = Serial.read();
+              if( ch == 'q' ) {
+                userExit = true;
+                linecount = 999;
+              }
+              if( ch == ' ' || ch == 0x0a || ch == 0x0d ) {
+                waitForInput = false;
+                linecount = 0;
+              }
+            }
+          }
+        }
+      } else {
+        Serial.write( ch ); // kinda important.
+      }   
+    }
+    lastch = ch;
+  }
+  if( digitalRead( kButton ) == LOW || userExit ) {
+    printmsg( msg_Break );
+  }
+
+  myFile.close();
   Led_Set( kLedIdle );
 }
 
@@ -965,6 +1096,54 @@ void cmd_erm( void )
   Led_Set( kLedIdle );
 }
 
+/////////////////
+// Micro
+
+void cmd_in( void )
+{
+  int port = 0;
+  int value = 0;
+  
+  if( argc != 2 ) { cmd_error( kErrNo ); return; }
+  
+  port = atoi( argv[1] );
+  if( port < 2 ) { cmd_error( kErrPort ); return; }
+  
+  Serial.print( "Port " );
+  Serial.print( port, DEC );
+  
+  pinMode( port, INPUT );
+  if( port > 13 ) value = analogRead( port );
+  else            value = digitalRead( port );
+  
+  Serial.print( " Value " );
+  Serial.println( value, DEC );    
+}
+
+void cmd_out( void )
+{
+  int port = 0;
+  int value = 0;
+  
+  if( argc != 3 ) { cmd_error( kErrNo ); return; }
+  
+  port = atoi( argv[1] );
+  if( port < 2 ) { cmd_error( kErrPort ); return; }
+  
+  value = atoi( argv[2] );
+  Serial.print( "Port " );
+  Serial.println( port, DEC );
+  Serial.print( "Value " );
+  Serial.println( value, DEC );
+  
+  
+  pinMode( port, OUTPUT );
+  analogWrite( port, value );
+}
+
+
+/////////////////
+// Utility
 
 void cmd_reset( void )
 {
