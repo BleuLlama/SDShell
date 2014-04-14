@@ -37,7 +37,6 @@
 //    then: delayed writes for small buffered targets systems
 //    more: word wrap
 //          0d 0a 0d 0a dumps nonprintables
-//          display page number
 //          skip to page number
 //    hex:  Paged?
 //    head <file> <lines>
@@ -48,7 +47,10 @@
 //    pagesize (value)  (with no operand, just displays the value
 //    sd (pin) to pick the sd card to use
 
-#define VERSION "0.7"
+#define VERSION "0.8"
+// v0.08 2014-04-13 - local echo for backspace/delete
+//                    newlines for "help"
+//                    better "help" spacing
 // v0.07 2014-04-07 - more, echo, in, out implemented
 // v0.06 2014-04-06 - fast LED flash on autobaud wait
 // v0.05 2014-04-05 - Path support for files added
@@ -129,7 +131,8 @@ static const unsigned char msg_SDCmd[]   PROGMEM = "No SD.";
 static const unsigned char msg_Cmds[]    PROGMEM = "Commands:";
 static const unsigned char msg_Bytes[]   PROGMEM = " bytes.";
 static const unsigned char msg_Files[]   PROGMEM = " Files.";
-static const unsigned char msg_More[]    PROGMEM = " ==[ More ]==";
+static const unsigned char msg_MoreA[]    PROGMEM = " ==[ More (page ";
+static const unsigned char msg_MoreB[]    PROGMEM = ") ]==";
 static const unsigned char msg_EchoOn[]  PROGMEM = "Echo on.";
 static const unsigned char msg_EchoOff[] PROGMEM = "Echo off.";
 static const unsigned char msg_BadPort[] PROGMEM = "Bad port.";
@@ -460,14 +463,25 @@ void getLine( void )
   do {
     while( !Serial.available() ) idle();
     ch = Serial.read();
-    if( localEcho ) { Serial.write( ch ); }
     
     // check for backspace
-    if( ch == 0x08 /* backspace character, CTRL-H */ ) {
+    if( ch == 0x08 /* backspace character, CTRL-H */ || ch == 0x7f /* delete on mac, del */ ) {
       if( linelen > 0 ) {
         linelen--;
+        line[linelen] = '\0'; // necessary for local echo re-echo
+        
+        if( localEcho ) {
+          // redump echo line
+          Serial.println( "" );
+          prompt();
+          Serial.print( line );
+          Serial.flush();
+        }
       }
+      
     } else {
+      if( localEcho ) { Serial.write( ch ); }
+
       line[linelen] = ch;
       linelen++;
     }
@@ -539,27 +553,31 @@ struct fcns {
 };
 #define kFcnFlagSD  (0x01)    /* command needs SD card */
 #define kFcnFlagHDR (0x80)    /* fakeo for header */
+#define kFcnFlagNL  (0x40)    /* fakeo for newline */
 
 struct fcns fcnlist[] =
 {
   // these require SD card
-  { "SD Card", NULL, kFcnFlagHDR },
+  { "SD Card:", NULL, kFcnFlagHDR },
   { "cd", &cmd_cd, kFcnFlagSD },
   { "pwd", &cmd_pwd, kFcnFlagSD },
   { "mkdir", &cmd_mkdir, kFcnFlagSD },
   { "rmdir", &cmd_rmdir, kFcnFlagSD },
+  { "", &cmd_rm, kFcnFlagNL },
   { "ls", &cmd_ls, kFcnFlagSD },
   { "dir", &cmd_ls, kFcnFlagSD },
   { "rm", &cmd_rm, kFcnFlagSD },
   { "del", &cmd_rm, kFcnFlagSD },
+  { "", &cmd_rm, kFcnFlagNL },
   { "capt", &cmd_capture, kFcnFlagSD },
   { "onto", &cmd_onto, kFcnFlagSD },
   { "hex", &cmd_hex, kFcnFlagSD },
   { "type", &cmd_type, kFcnFlagSD },
+  { "cat", &cmd_type, kFcnFlagSD },
   { "more", &cmd_more, kFcnFlagSD },
   
   // these are for EEProm IO
-  { "EEProm", NULL, kFcnFlagHDR },
+  { "EEProm:", NULL, kFcnFlagHDR },
   { "ecapt", &cmd_ecapture },
   { "eonto", &cmd_eonto },
   { "ehex", &cmd_ehex },
@@ -569,12 +587,12 @@ struct fcns fcnlist[] =
   { "esave", &cmd_esave },
 
   // Micro
-  { "Micro", NULL, kFcnFlagHDR },
+  { "Micro IO:", NULL, kFcnFlagHDR },
   { "in", &cmd_in },
   { "out", &cmd_out },
   
   // Utility
-  { "Utility", NULL, kFcnFlagHDR },
+  { "Utility:", NULL, kFcnFlagHDR },
   { "echo", &cmd_echo },
   { "?", &cmd_help },
   { "help", &cmd_help },
@@ -817,6 +835,7 @@ void cmd_type( void )
 void cmd_more( void )
 {
   int linecount = 0;
+  long page = 0;
   int ch, lastch;
   if( argc < 2 ) { cmd_error( kErrNo ); return; }
   
@@ -844,7 +863,10 @@ void cmd_more( void )
         Serial.println();
         
         if( linecount > kPageSize ) {
-          printmsg( msg_More );
+          printmsgNoNL( msg_MoreA );
+          Serial.print( page++, DEC );
+          printmsg( msg_MoreB );
+
           bool waitForInput = true;
           while( waitForInput ) {
             while( !Serial.available() && digitalRead( kButton ) != LOW ) { idle(); }
@@ -1155,14 +1177,21 @@ void cmd_help( void )
   int i=0;
   int items = 0;
   while( fcnlist[i].name ) {
-    if( fcnlist[i].flags & kFcnFlagHDR ) {
+
+    if( fcnlist[i].flags & kFcnFlagNL ) {
       items = 0;
+    } else if( fcnlist[i].flags & kFcnFlagHDR ) {
       Serial.println( "" );
-      Serial.println( fcnlist[i].name );
-    } else {
-      if( 0 == (items % 0)) { Serial.print( "   " ); }
       Serial.print( fcnlist[i].name );
-      Serial.print( " \t" );
+      items = 0;
+    } else {
+      if( 0 == (items % 0)) { 
+        Serial.println( "" );
+        Serial.print( "   " );
+      }
+      sprintf( (char*)buf, "%-6s ",  fcnlist[i].name );
+
+      Serial.print( buf );
       items++;
     }
     i++;
@@ -1208,13 +1237,17 @@ void processLine( void )
 // main loop entry point
 
 bool showPrompt = true;
+void prompt()
+{
+    Serial.print( "> " );
+    Serial.flush();
+}
 
 void loop()
 {
   // nothing happens after setup finishes.
   if( showPrompt ) {
-    Serial.print( "> " );
-    Serial.flush();
+    prompt();
   }
   
   getLine();
