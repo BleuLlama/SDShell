@@ -16,7 +16,7 @@ start it up.
 Additional info for this project might be available at 
 [Geodesic Sphere Blog](http://geodesicsphere.blogspot.com/search/label/Arduino)
 
-Picture are available at [my image gallery](http://www.umlautllama.com/i/#1) of some test builds.
+Pictures of hardare builds are available at [my image gallery](http://www.umlautllama.com/i/#1).
 
 Commands
 ========
